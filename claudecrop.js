@@ -1,4 +1,4 @@
-me./*!
+/*!
  * ClaudeCrop - v1.0.0
  * A flexible, jQuery-free image cropping plugin with aspect ratio support
  *
