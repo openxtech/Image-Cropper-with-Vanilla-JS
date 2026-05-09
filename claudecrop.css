@@ -1,0 +1,331 @@
+/*
+ * ClaudeCrop — v1.0.0
+ * claudecrop.css
+ *
+ * Ce fichier gère uniquement la mise en forme visuelle du plugin.
+ * Toutes les propriétés de layout (position, inset, transform, display…)
+ * sont déjà gérées en inline par claudecrop.js — ce CSS ne les redéfinit pas.
+ *
+ * Usage :
+ *   <link rel="stylesheet" href="claudecrop.css">
+ *   <script src="claudecrop.js"></script>
+ *
+ * Personnalisation : modifier les variables CSS dans :root
+ * ─────────────────────────────────────────────────────────────────────
+ *
+ * Classes injectées par le plugin :
+ *   .cc-preview                       Zone de prévisualisation
+ *   .cc-preview-image-container       Conteneur de drag interne
+ *   .cc-preview-image                 Balise <img> de l'image
+ *   .cc-preview-background-container  Conteneur du fond flou (opt.)
+ *   .cc-preview-background            Image de fond floutée (opt.)
+ *   .cc-crop-overlay                  Overlay du cadre de recadrage
+ *   .cc-crop-frame                    Rectangle de recadrage
+ *   .cc-image-loading                 État : chargement en cours
+ *   .cc-image-loaded                  État : image chargée
+ *   .cc-drag-hovered                  État : fichier survolé (DnD)
+ *   .cc-disabled                      État : plugin désactivé
+ *
+ * Classes à placer dans le HTML par l'intégrateur :
+ *   .cc-image-input                   <input type="file">  (masqué)
+ *   .cc-image-zoom-input              <input type="range"> (slider zoom)
+ */
+
+/* ═══════════════════════════════════════════════════════════
+   VARIABLES
+   ═══════════════════════════════════════════════════════════ */
+
+:root {
+  /* Zone de preview */
+  --cc-preview-bg:             #1c1c1c;
+  --cc-preview-border:         1px solid #383838;
+  --cc-preview-radius:         0px;
+  --cc-preview-cursor:         grab;
+
+  /* Image */
+  --cc-image-transition:       opacity .25s ease, filter .25s ease;
+
+  /* État chargement */
+  --cc-loading-opacity:        0.4;
+  --cc-loading-blur:           8px;
+
+  /* Cadre de recadrage — couleurs uniquement
+     (dimensions et positions gérées par le JS) */
+  --cc-frame-border:           2px solid rgba(255, 255, 255, 0.9);
+  --cc-frame-shadow:           0 0 0 1px rgba(0, 0, 0, 0.35),
+                               inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+
+  /* Drag & drop */
+  --cc-drag-border-color:      #4a9eff;
+  --cc-drag-outline:           2px solid #4a9eff;
+  --cc-drag-bg:                rgba(74, 158, 255, 0.07);
+
+  /* Désactivé */
+  --cc-disabled-opacity:       0.4;
+
+  /* Slider de zoom */
+  --cc-slider-height:          4px;
+  --cc-slider-track-bg:        #d0d0d0;
+  --cc-slider-track-radius:    4px;
+  --cc-slider-thumb-size:      18px;
+  --cc-slider-thumb-bg:        #222222;
+  --cc-slider-thumb-shadow:    0 1px 4px rgba(0, 0, 0, 0.3);
+  --cc-slider-thumb-radius:    50%;
+}
+
+
+/* ═══════════════════════════════════════════════════════════
+   1. ZONE DE PRÉVISUALISATION  (.cc-preview)
+      Le JS pose position:relative et overflow:hidden en inline.
+      Ici on gère uniquement l'aspect visuel.
+   ═══════════════════════════════════════════════════════════ */
+
+.cc-preview {
+  background:    var(--cc-preview-bg);
+  border:        var(--cc-preview-border);
+  border-radius: var(--cc-preview-radius);
+  cursor:        var(--cc-preview-cursor);
+  user-select:   none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  box-sizing:    border-box;
+}
+
+
+/* ═══════════════════════════════════════════════════════════
+   2. CONTENEUR DE DRAG  (.cc-preview-image-container)
+      Le JS pose position:absolute, inset:0, cursor:grab,
+      touchAction:none en inline.
+      Le CSS ne redéfinit rien de ces propriétés.
+   ═══════════════════════════════════════════════════════════ */
+
+.cc-preview-image-container {
+  /* Rien à surcharger — tout est inline */
+}
+
+
+/* ═══════════════════════════════════════════════════════════
+   3. IMAGE DE PRÉVISUALISATION  (.cc-preview-image)
+      Le JS gère : position, transformOrigin, willChange,
+      userSelect, pointerEvents, et transform dynamiquement.
+      On ajoute uniquement la transition de chargement.
+   ═══════════════════════════════════════════════════════════ */
+
+.cc-preview-image {
+  transition: var(--cc-image-transition);
+  /* Rendu GPU — évite les micro-saccades */
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+
+/* ═══════════════════════════════════════════════════════════
+   4. FOND FLOUTÉ  (.cc-preview-background / -container)
+      Le JS pose tout le positionnement et le filtre inline.
+      Aucune surcharge nécessaire.
+   ═══════════════════════════════════════════════════════════ */
+
+.cc-preview-background-container {
+  /* géré entièrement en inline */
+}
+
+.cc-preview-background {
+  /* géré entièrement en inline */
+}
+
+
+/* ═══════════════════════════════════════════════════════════
+   5. OVERLAY DE RECADRAGE  (.cc-crop-overlay)
+      Le JS gère position, inset, pointerEvents, zIndex
+      et display (none/block) en inline.
+      Aucune surcharge nécessaire.
+   ═══════════════════════════════════════════════════════════ */
+
+.cc-crop-overlay {
+  /* géré entièrement en inline */
+}
+
+
+/* ═══════════════════════════════════════════════════════════
+   6. CADRE DE RECADRAGE  (.cc-crop-frame)
+      Le JS pose position, boxSizing, border, boxShadow,
+      pointerEvents, transition, et top/left/width/height inline.
+      On peut surcharger les valeurs visuelles via les variables.
+   ═══════════════════════════════════════════════════════════ */
+
+.cc-crop-frame {
+  border:     var(--cc-frame-border)  !important;
+  box-shadow: var(--cc-frame-shadow)  !important;
+}
+
+
+/* ═══════════════════════════════════════════════════════════
+   7. ÉTAT : CHARGEMENT EN COURS  (.cc-image-loading)
+      Ajouté sur .cc-preview par le JS.
+   ═══════════════════════════════════════════════════════════ */
+
+.cc-image-loading {
+  cursor: wait;
+}
+
+.cc-image-loading .cc-preview-image {
+  opacity: var(--cc-loading-opacity);
+  filter:  blur(var(--cc-loading-blur));
+}
+
+/* Curseur du conteneur aussi en attente */
+.cc-image-loading .cc-preview-image-container {
+  cursor: wait;
+}
+
+
+/* ═══════════════════════════════════════════════════════════
+   8. ÉTAT : IMAGE CHARGÉE  (.cc-image-loaded)
+      Ajouté sur .cc-preview par le JS.
+   ═══════════════════════════════════════════════════════════ */
+
+.cc-image-loaded {
+  cursor: var(--cc-preview-cursor);
+}
+
+.cc-image-loaded .cc-preview-image {
+  opacity: 1;
+  filter:  none;
+}
+
+
+/* ═══════════════════════════════════════════════════════════
+   9. ÉTAT : DRAG & DROP  (.cc-drag-hovered)
+      Ajouté sur .cc-preview par le JS lors du survol.
+   ═══════════════════════════════════════════════════════════ */
+
+.cc-drag-hovered {
+  outline:        var(--cc-drag-outline);
+  outline-offset: -2px;
+  background:     var(--cc-drag-bg);
+}
+
+
+/* ═══════════════════════════════════════════════════════════
+   10. ÉTAT : DÉSACTIVÉ  (.cc-disabled)
+       Ajouté sur l'élément racine par le JS.
+   ═══════════════════════════════════════════════════════════ */
+
+.cc-disabled {
+  opacity:        var(--cc-disabled-opacity);
+  pointer-events: none;
+  cursor:         not-allowed;
+}
+
+.cc-disabled .cc-preview,
+.cc-disabled .cc-preview-image-container {
+  cursor: not-allowed;
+}
+
+
+/* ═══════════════════════════════════════════════════════════
+   11. INPUT FICHIER  (.cc-image-input)
+       Masqué — déclenché via un <label> stylisé par
+       l'intégrateur.
+   ═══════════════════════════════════════════════════════════ */
+
+.cc-image-input {
+  display: none;
+}
+
+
+/* ═══════════════════════════════════════════════════════════
+   12. SLIDER DE ZOOM  (.cc-image-zoom-input)
+       Le JS ne touche pas au style visuel du slider.
+       Ce bloc est donc entièrement sous la responsabilité du CSS.
+   ═══════════════════════════════════════════════════════════ */
+
+.cc-image-zoom-input {
+  /* Reset cross-browser */
+  -webkit-appearance: none;
+  appearance:         none;
+
+  display:       block;
+  width:         100%;
+  height:        var(--cc-slider-height);
+  background:    var(--cc-slider-track-bg);
+  border-radius: var(--cc-slider-track-radius);
+  border:        none;
+  outline:       none;
+  cursor:        pointer;
+  padding:       0;
+  margin:        0;
+}
+
+/* ── Thumb WebKit (Chrome, Edge, Safari) ── */
+.cc-image-zoom-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance:         none;
+  width:         var(--cc-slider-thumb-size);
+  height:        var(--cc-slider-thumb-size);
+  border-radius: var(--cc-slider-thumb-radius);
+  background:    var(--cc-slider-thumb-bg);
+  box-shadow:    var(--cc-slider-thumb-shadow);
+  cursor:        grab;
+  border:        none;
+  transition:    transform .12s ease;
+}
+
+.cc-image-zoom-input::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+
+.cc-image-zoom-input::-webkit-slider-thumb:active {
+  cursor:    grabbing;
+  transform: scale(1.25);
+}
+
+/* ── Thumb Firefox ── */
+.cc-image-zoom-input::-moz-range-thumb {
+  width:         var(--cc-slider-thumb-size);
+  height:        var(--cc-slider-thumb-size);
+  border-radius: var(--cc-slider-thumb-radius);
+  background:    var(--cc-slider-thumb-bg);
+  box-shadow:    var(--cc-slider-thumb-shadow);
+  cursor:        grab;
+  border:        none;
+  transition:    transform .12s ease;
+}
+
+.cc-image-zoom-input::-moz-range-thumb:active {
+  cursor:    grabbing;
+  transform: scale(1.2);
+}
+
+/* ── Track Firefox ── */
+.cc-image-zoom-input::-moz-range-track {
+  height:        var(--cc-slider-height);
+  background:    var(--cc-slider-track-bg);
+  border-radius: var(--cc-slider-track-radius);
+  border:        none;
+}
+
+/* ── Désactivé ── */
+.cc-image-zoom-input:disabled {
+  opacity: 0.25;
+  cursor:  not-allowed;
+}
+
+.cc-image-zoom-input:disabled::-webkit-slider-thumb {
+  cursor: not-allowed;
+}
+
+.cc-image-zoom-input:disabled::-moz-range-thumb {
+  cursor: not-allowed;
+}
+
+
+/* ═══════════════════════════════════════════════════════════
+   13. ACCESSIBILITÉ
+   ═══════════════════════════════════════════════════════════ */
+
+@media (prefers-reduced-motion: reduce) {
+  .cc-preview-image {
+    transition: none !important;
+  }
+}

@@ -1,5 +1,5 @@
-me./*!
- * ClaudeCrop - v1.0.0
+/*!
+ * ClaudeCrop - v1.0.1
  * A flexible, jQuery-free image cropping plugin with aspect ratio support
  *
  * Features:
@@ -12,6 +12,7 @@ me./*!
  *  - exportBlob() for async Blob export
  *  - Full rotation support
  *  - Aspect ratio lock (1:1, 4:3, 16:9, 9:16, or any custom ratio)
+ *  - Edit locking (lock/unlock interactions at init or runtime)
  *  - ES6 classes, tree-shakeable
  */
 
@@ -46,6 +47,7 @@ me./*!
     IMAGE_LOADED:    'cc-image-loaded',
     DRAG_HOVERED:    'cc-drag-hovered',
     DISABLED:        'cc-disabled',
+    LOCKED:          'cc-locked',   // NEW: edit-locked state (interactions blocked, file input still active)
   };
 
   /* ─────────────────────────── Utilities ──────────────────────────── */
@@ -164,6 +166,9 @@ me./*!
     /**
      * @param {string|Element} element - Root container
      * @param {object} options
+     * @param {boolean} [options.locked=false]
+     *   Start with all edit interactions locked (drag, zoom, rotation).
+     *   File loading remains active. Call unlock() to re-enable edits.
      * @param {string|object|number|null} [options.aspectRatio=null]
      *   Lock crop to a ratio. Examples: '16:9', '4:3', '1:1', '9:16',
      *   { w:16, h:9 }, 1.777, null (free).
@@ -201,7 +206,11 @@ me./*!
         allowDragNDrop: true,
         smallImage:     'reject',
 
-        // ── Aspect ratio (NEW) ─────────────────────────────────────
+        // ── Edit lock (NEW) ────────────────────────────────────────
+        locked: false,   // true → start locked; call unlock() to re-enable
+        // ──────────────────────────────────────────────────────────
+
+        // ── Aspect ratio ───────────────────────────────────────────
         aspectRatio:    null,      // '16:9' | '4:3' | '1:1' | '9:16' | {w,h} | number | null
         aspectRatioFit: 'contain', // 'contain' | 'cover'
         showCropFrame:  true,      // show the animated crop-frame overlay when ratio is set
@@ -225,6 +234,8 @@ me./*!
         onZoomChange:      () => {},
         onOffsetChange:    () => {},
         onAspectRatioChange: () => {},
+        onLock:            () => {},   // NEW
+        onUnlock:          () => {},   // NEW
       }, options);
 
       this._zoomer      = new Zoomer();
@@ -232,6 +243,7 @@ me./*!
       this._zoom        = 1;
       this._offset      = { x: 0, y: 0 };
       this._rotation    = 0;
+      this._locked      = false;   // NEW: internal lock flag (set properly in _init)
 
       // Parse initial aspect ratio
       this._aspectRatio = parseRatio(this._opts.aspectRatio);
@@ -308,8 +320,12 @@ me./*!
 
       this._setInitialZoomOption(this._opts.initialZoom);
       this._buildCropFrame();
-      this._applyCropFrame(); // apply initial ratio if set
+      this._applyCropFrame();
       this._bindListeners();
+
+      // Apply initial lock state AFTER listeners are bound so lock() can
+      // properly reflect the locked cursor without removing event listeners.
+      if (this._opts.locked) this.lock();
 
       if (this._opts.imageState && this._opts.imageState.src) {
         this.loadImage(this._opts.imageState.src);
@@ -323,13 +339,7 @@ me./*!
 
     /* ──────── Crop Frame (aspect ratio overlay) ──────── */
 
-    /**
-     * Build the crop-frame overlay elements.
-     * The overlay dims the area outside the crop zone.
-     * The frame draws the crop rectangle with corner handles.
-     */
     _buildCropFrame() {
-      // Overlay: 4 dark curtains (top, right, bottom, left)
       this._cropOverlay = createElement('div', CLASS.CROP_OVERLAY, {
         position: 'absolute', inset: '0', pointerEvents: 'none', zIndex: '10',
       });
@@ -347,7 +357,6 @@ me./*!
       };
       Object.values(this._curtains).forEach(c => this._cropOverlay.appendChild(c));
 
-      // Frame rectangle
       this._cropFrame = createElement('div', CLASS.CROP_FRAME, {
         position: 'absolute', boxSizing: 'border-box',
         border: '2px solid rgba(255,255,255,0.85)',
@@ -355,7 +364,6 @@ me./*!
         boxShadow: '0 0 0 1px rgba(0,0,0,0.3)',
       });
 
-      // Rule-of-thirds grid lines
       for (let i = 1; i <= 2; i++) {
         const vl = createElement('div', '', {
           position: 'absolute', top: '0', bottom: '0',
@@ -371,7 +379,6 @@ me./*!
         this._cropFrame.appendChild(hl);
       }
 
-      // Corner handles
       const corners = [
         { top: '-4px', left: '-4px' },
         { top: '-4px', right: '-4px' },
@@ -392,17 +399,11 @@ me./*!
       this._preview.appendChild(this._cropOverlay);
     }
 
-    /**
-     * Calculate and apply the crop frame dimensions for the current ratio.
-     * Updates this._cropRect = { x, y, width, height } (in preview pixels).
-     * If no ratio, crop rect = full preview.
-     */
     _applyCropFrame() {
       const pw = this._previewSize.width;
       const ph = this._previewSize.height;
 
       if (!this._aspectRatio) {
-        // No ratio → full preview is the crop zone, hide overlay
         this._cropRect = { x: 0, y: 0, width: pw, height: ph };
         css(this._cropOverlay, { display: 'none' });
         return;
@@ -415,30 +416,18 @@ me./*!
       }
 
       const { w: rw, h: rh } = this._aspectRatio;
-      const targetRatio = rw / rh;
+      const targetRatio  = rw / rh;
       const previewRatio = pw / ph;
-      const fit = this._opts.aspectRatioFit;
+      const fit          = this._opts.aspectRatioFit;
 
       let cropW, cropH;
 
       if (fit === 'cover') {
-        // Frame covers the preview → one dimension equals preview, other overflows (clipped)
-        if (targetRatio > previewRatio) {
-          cropW = pw;
-          cropH = pw / targetRatio;
-        } else {
-          cropH = ph;
-          cropW = ph * targetRatio;
-        }
+        if (targetRatio > previewRatio) { cropW = pw; cropH = pw / targetRatio; }
+        else                            { cropH = ph; cropW = ph * targetRatio; }
       } else {
-        // 'contain' (default) → frame is inside preview
-        if (targetRatio > previewRatio) {
-          cropW = pw;
-          cropH = pw / targetRatio;
-        } else {
-          cropH = ph;
-          cropW = ph * targetRatio;
-        }
+        if (targetRatio > previewRatio) { cropW = pw; cropH = pw / targetRatio; }
+        else                            { cropH = ph; cropW = ph * targetRatio; }
       }
 
       cropW = Math.round(cropW);
@@ -449,19 +438,12 @@ me./*!
 
       this._cropRect = { x: cx, y: cy, width: cropW, height: cropH };
 
-      // Position curtains
-      css(this._curtains.top,    { top: '0', left: '0', right: '0',              height: cy + 'px' });
-      css(this._curtains.bottom, { bottom: '0', left: '0', right: '0',           height: (ph - cy - cropH) + 'px' });
-      css(this._curtains.left,   { top: cy+'px', left: '0',                       width: cx+'px', height: cropH+'px' });
-      css(this._curtains.right,  { top: cy+'px', right: '0',                      width: (pw - cx - cropW)+'px', height: cropH+'px' });
+      css(this._curtains.top,    { top: '0', left: '0', right: '0',    height: cy + 'px' });
+      css(this._curtains.bottom, { bottom: '0', left: '0', right: '0', height: (ph - cy - cropH) + 'px' });
+      css(this._curtains.left,   { top: cy+'px', left: '0',            width: cx+'px', height: cropH+'px' });
+      css(this._curtains.right,  { top: cy+'px', right: '0',           width: (pw - cx - cropW)+'px', height: cropH+'px' });
 
-      // Position frame
-      css(this._cropFrame, {
-        top:    cy + 'px',
-        left:   cx + 'px',
-        width:  cropW + 'px',
-        height: cropH + 'px',
-      });
+      css(this._cropFrame, { top: cy+'px', left: cx+'px', width: cropW+'px', height: cropH+'px' });
     }
 
     /* ──────── Listener management ──────── */
@@ -530,11 +512,6 @@ me./*!
       reader.readAsDataURL(file);
     }
 
-    /**
-     * Load an image by URL or data URI.
-     * @param {string} src
-     * @returns {Promise<void>}
-     */
     loadImage(src) {
       if (!src) return Promise.reject(new Error('No src provided'));
 
@@ -598,13 +575,14 @@ me./*!
     /* ──────── Pointer ──────── */
 
     _onPointerDown(e) {
+      if (this._locked) return;                          // ← LOCK GUARD
       if (!this._imageLoaded || e.button > 0) return;
       this._activePointers = this._activePointers || new Map();
       this._activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
       this._imgContainer.setPointerCapture(e.pointerId);
 
       if (this._activePointers.size === 1) {
-        this._dragOrigin = { x: e.clientX, y: e.clientY };
+        this._dragOrigin   = { x: e.clientX, y: e.clientY };
         this._moveContinue = true;
         this._imgContainer.style.cursor = 'grabbing';
       }
@@ -619,6 +597,7 @@ me./*!
     }
 
     _onPointerMove(e) {
+      if (this._locked) return;                          // ← LOCK GUARD
       if (!this._imageLoaded || !this._activePointers || !this._activePointers.has(e.pointerId)) return;
       this._activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
@@ -643,7 +622,8 @@ me./*!
       if (this._activePointers) this._activePointers.delete(e.pointerId);
       if (!this._activePointers || this._activePointers.size === 0) {
         this._moveContinue = false;
-        this._imgContainer.style.cursor = 'grab';
+        // Restore cursor according to lock state
+        this._imgContainer.style.cursor = this._locked ? 'default' : 'grab';
       }
     }
 
@@ -656,6 +636,7 @@ me./*!
     /* ──────── Wheel ──────── */
 
     _onWheel(e) {
+      if (this._locked) return;                          // ← LOCK GUARD
       if (!this._imageLoaded) return;
       e.preventDefault();
 
@@ -669,7 +650,7 @@ me./*!
       if (newZoom === oldZoom) return;
 
       const ratio = newZoom / oldZoom;
-      this._zoom = newZoom;
+      this._zoom  = newZoom;
       this.offset = { x: mx - (mx - this._offset.x) * ratio, y: my - (my - this._offset.y) * ratio };
 
       this._syncSlider();
@@ -690,6 +671,7 @@ me./*!
     /* ──────── Slider ──────── */
 
     _onSliderChange() {
+      if (this._locked) return;                          // ← LOCK GUARD
       if (!this._imageLoaded) return;
       const z = this._zoomer.sliderToZoom(+this._zoomSlider.value);
       if (z !== this._zoom) this.zoom = z;
@@ -715,7 +697,10 @@ me./*!
 
       this._zoom = exists(targetZoom) ? this._zoomer.clamp(targetZoom) : this._zoom;
       this._syncSlider();
-      this._zoomer.isZoomable() ? this._enableSlider() : this._disableSlider();
+      // Respect lock state when deciding slider enabled/disabled
+      if (!this._locked) {
+        this._zoomer.isZoomable() ? this._enableSlider() : this._disableSlider();
+      }
     }
 
     _fixOffset({ x, y }) {
@@ -723,8 +708,6 @@ me./*!
 
       const iw = this.imageWidth  * this._zoom;
       const ih = this.imageHeight * this._zoom;
-
-      // When a crop rect is defined, constrain so the image always fills the crop zone
       const cr = this._cropRect || { x: 0, y: 0, width: this._previewSize.width, height: this._previewSize.height };
 
       if (!this._opts.freeMove) {
@@ -790,47 +773,83 @@ me./*!
       };
     }
 
-    /** Rotate 90° clockwise */
+    /**
+     * Rotate 90° clockwise.
+     * No-op when locked.
+     */
     rotateCW() {
+      if (this._locked) return;                          // ← LOCK GUARD
       this._rotation = (this._rotation + 90) % 360;
       if (this._imageLoaded) { this._setupZoomer(); this.centerImage(); }
     }
 
-    /** Rotate 90° counter-clockwise */
+    /**
+     * Rotate 90° counter-clockwise.
+     * No-op when locked.
+     */
     rotateCCW() {
+      if (this._locked) return;                          // ← LOCK GUARD
       this._rotation = (this._rotation + 270) % 360;
       if (this._imageLoaded) { this._setupZoomer(); this.centerImage(); }
     }
 
-    /** Reset zoom and center */
+    /** Reset zoom and center. No-op when locked. */
     reset() {
+      if (this._locked) return;                          // ← LOCK GUARD
       if (!this._imageLoaded) return;
       this._rotation = 0;
       this._setupZoomer(this._initialZoom);
       this.centerImage();
     }
 
-    /** Disable all interactions */
+    /** Disable all interactions (including file input). Adds cc-disabled class. */
     disable() {
       this._unbindListeners();
       this._disableSlider();
       this._el.classList.add(CLASS.DISABLED);
     }
 
-    /** Re-enable all interactions */
+    /** Re-enable all interactions. Removes cc-disabled class. */
     enable() {
       this._bindListeners();
       if (this._zoomer.isZoomable()) this._enableSlider();
       this._el.classList.remove(CLASS.DISABLED);
     }
 
-    isZoomable() { return this._zoomer.isZoomable(); }
+    /**
+     * Lock all edit interactions (drag, zoom, rotation).
+     * File loading via the file input remains active.
+     * Emits 'lock' and calls onLock callback.
+     */
+    lock() {
+      if (this._locked) return;
+      this._locked = true;
+      this._el.classList.add(CLASS.LOCKED);
+      this._imgContainer.style.cursor = 'default';
+      this._disableSlider();
+      this._opts.onLock();
+      this.emit('lock');
+    }
 
     /**
-     * Set (or clear) the aspect ratio.
-     * @param {string|object|number|null} ratio
-     *   '16:9' | '4:3' | '1:1' | '9:16' | {w,h} | number | null (free)
+     * Unlock edit interactions previously locked with lock() or locked:true.
+     * Emits 'unlock' and calls onUnlock callback.
      */
+    unlock() {
+      if (!this._locked) return;
+      this._locked = false;
+      this._el.classList.remove(CLASS.LOCKED);
+      this._imgContainer.style.cursor = 'grab';
+      if (this._imageLoaded && this._zoomer.isZoomable()) this._enableSlider();
+      this._opts.onUnlock();
+      this.emit('unlock');
+    }
+
+    /** @returns {boolean} Whether edits are currently locked */
+    get isLocked() { return this._locked; }
+
+    isZoomable() { return this._zoomer.isZoomable(); }
+
     setAspectRatio(ratio) {
       this._aspectRatio = parseRatio(ratio);
       this._opts.aspectRatio = ratio;
@@ -845,15 +864,8 @@ me./*!
       this.emit('aspectratiochange', this._aspectRatio);
     }
 
-    /** Returns the current aspect ratio object { w, h } or null if free. */
     getAspectRatio() { return this._aspectRatio ? { ...this._aspectRatio } : null; }
 
-    /**
-     * Export the cropped region as a data URL.
-     * When an aspect ratio is set, exports exactly the crop-frame area.
-     * @param {object} [options]
-     * @returns {string|null}
-     */
     export(options = {}) {
       if (!this._image.src) return null;
 
@@ -874,7 +886,6 @@ me./*!
         ctx.fillRect(0, 0, canvas.width, canvas.height);
       }
 
-      // Translate to account for crop zone offset
       const ox = (this._rotatedOffset.x - cr.x) * exportZoom;
       const oy = (this._rotatedOffset.y - cr.y) * exportZoom;
 
@@ -891,24 +902,14 @@ me./*!
       return canvas.toDataURL(opts.type, opts.quality);
     }
 
-    /**
-     * Export cropped region as a Blob (async).
-     * @param {object} [options]
-     * @returns {Promise<Blob>}
-     */
     exportBlob(options = {}) {
       return new Promise((resolve, reject) => {
         const dataUrl = this.export(options);
         if (!dataUrl) return reject(new Error('No image loaded'));
-
-        fetch(dataUrl)
-          .then(r => r.blob())
-          .then(resolve)
-          .catch(reject);
+        fetch(dataUrl).then(r => r.blob()).then(resolve).catch(reject);
       });
     }
 
-    /** Fully destroy the instance */
     destroy() {
       this._unbindListeners();
       this._imgContainer.remove();
@@ -970,17 +971,14 @@ me./*!
     get rotation()     { return this._rotation; }
     get aspectRatio()  { return this._aspectRatio; }
     set aspectRatio(v) { this.setAspectRatio(v); }
-
-    /** Read-only: the crop rectangle in preview pixels */
-    get cropRect() { return this._cropRect ? { ...this._cropRect } : null; }
+    get cropRect()     { return this._cropRect ? { ...this._cropRect } : null; }
   }
 
   /* ──────── Statics ──────── */
   ClaudeCrop.ERRORS      = ERRORS;
   ClaudeCrop.parseRatio  = parseRatio;
-  ClaudeCrop.version     = '1.0.0';
+  ClaudeCrop.version     = '1.0.1';
 
-  /** Preset ratios for convenience */
   ClaudeCrop.RATIOS = {
     FREE:    null,
     SQUARE:  '1:1',
