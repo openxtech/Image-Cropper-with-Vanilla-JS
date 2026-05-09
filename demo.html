@@ -1,0 +1,1307 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ClaudeCrop — Démo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:       #0c0c0f;
+    --surface:  #16161d;
+    --surface2: #1e1e28;
+    --border:   #26263a;
+    --accent:   #7c6dfa;
+    --accent-h: #9b8dff;
+    --green:    #4afaa0;
+    --yellow:   #fad44a;
+    --red:      #fa4a6d;
+    --text:     #e4e4f0;
+    --muted:    #5a5a7a;
+    --r:        10px;
+  }
+
+  html, body { height: 100%; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    padding: 0 28px;
+  }
+
+  /* ── Header ── */
+  header {
+    padding: 32px 0 28px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 32px;
+    flex-wrap: wrap;
+  }
+
+  .logo {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: clamp(26px, 4vw, 42px);
+    letter-spacing: -2px;
+    display: flex;
+    align-items: baseline;
+    gap: 2px;
+  }
+
+  .logo-claude { color: var(--accent-h); }
+  .logo-crop   { color: var(--text); }
+  .logo-dot    { color: var(--muted); }
+
+  .badge {
+    font-size: 10px;
+    padding: 3px 8px;
+    border-radius: 20px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+  }
+  .badge-ver { background: var(--surface2); color: var(--muted); border: 1px solid var(--border); }
+  .badge-new { background: rgba(124,109,250,.15); color: var(--accent-h); border: 1px solid rgba(124,109,250,.3); }
+
+  header .right {
+    margin-left: auto;
+    text-align: right;
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.8;
+  }
+
+  /* ── Main layout ── */
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 20px;
+    align-items: start;
+    flex: 1;
+    max-width: 1100px;
+    margin: 0 auto;
+    width: 100%;
+    padding-bottom: 40px;
+  }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    overflow: hidden;
+  }
+
+  .card-head {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+  }
+
+  .trafficlight { display:flex; gap:5px; }
+  .tl { width:9px; height:9px; border-radius:50%; }
+
+  /* ── Preview zone ── */
+  #crop-root { padding: 18px; }
+
+  .cc-preview {
+    width: 100%;
+    height: 380px;
+    background: #0a0a0e;
+    border-radius: 8px;
+    position: relative;
+    overflow: hidden;
+    cursor: grab;
+    border: 1px solid var(--border);
+  }
+
+  /* Subtle grid bg */
+  .cc-preview::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(var(--border) 1px, transparent 1px),
+      linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    background-size: 24px 24px;
+    opacity: .35;
+    pointer-events: none;
+  }
+
+  /* Empty state */
+  .empty-state {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    color: var(--muted);
+    font-size: 12px;
+    pointer-events: none;
+    transition: opacity .3s;
+    z-index: 1;
+  }
+
+  .empty-icon {
+    width: 52px; height: 52px;
+    border: 1.5px dashed #333;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+  }
+
+  .cc-image-loaded .empty-state,
+  .cc-image-loading .empty-state { opacity: 0; }
+
+  .cc-drag-hovered { outline: 2px solid var(--accent) !important; }
+  .cc-drag-hovered::after {
+    content: 'Déposer ici';
+    position: absolute;
+    inset: 0;
+    background: rgba(124,109,250,.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Syne', sans-serif;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--accent-h);
+    z-index: 20;
+    pointer-events: none;
+  }
+
+  .cc-image-loading .cc-preview-image { filter: blur(4px); opacity: .5; }
+
+  /* ── Ratio selector ── */
+  .ratio-bar {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+    align-items: center;
+  }
+
+  .ratio-label {
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-right: 4px;
+  }
+
+  .ratio-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all .15s;
+    line-height: 1;
+  }
+
+  .ratio-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent-h);
+    background: rgba(124,109,250,.07);
+  }
+
+  .ratio-btn.active {
+    border-color: var(--accent);
+    background: rgba(124,109,250,.15);
+    color: var(--accent-h);
+  }
+
+  .ratio-icon {
+    display: inline-block;
+    border: 1.5px solid currentColor;
+    border-radius: 2px;
+    opacity: .7;
+  }
+
+  /* ── Controls bar ── */
+  .controls {
+    padding: 14px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    border-top: 1px solid var(--border);
+  }
+
+  .ctrl-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .ctrl-lbl {
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    width: 52px;
+    flex-shrink: 0;
+  }
+
+  .btn-group { display: flex; gap: 6px; flex-wrap: wrap; }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 7px 13px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all .15s;
+    white-space: nowrap;
+    line-height: 1;
+  }
+
+  .btn:hover { border-color: var(--accent); color: var(--accent-h); background: rgba(124,109,250,.07); }
+  .btn:active { transform: scale(.96); }
+
+  .btn-accent {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+    font-weight: 500;
+  }
+  .btn-accent:hover { background: var(--accent-h); border-color: var(--accent-h); color: #fff; }
+
+  .btn-green {
+    background: rgba(74,250,160,.12);
+    border-color: rgba(74,250,160,.3);
+    color: var(--green);
+  }
+  .btn-green:hover { background: rgba(74,250,160,.2); color: var(--green); border-color: var(--green); }
+
+  label.btn { cursor: pointer; }
+  input.cc-image-input { display: none; }
+
+  /* Range */
+  input[type="range"].cc-image-zoom-input {
+    flex: 1;
+    -webkit-appearance: none;
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+  }
+
+  input[type="range"].cc-image-zoom-input::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    background: var(--accent-h);
+    cursor: grab;
+    transition: transform .15s;
+    box-shadow: 0 0 0 3px rgba(124,109,250,.2);
+  }
+
+  input[type="range"].cc-image-zoom-input::-webkit-slider-thumb:active {
+    transform: scale(1.25); cursor: grabbing;
+  }
+
+  input[type="range"].cc-image-zoom-input:disabled { opacity: .25; cursor: not-allowed; }
+
+  /* ── Sidebar ── */
+  .sidebar { display: flex; flex-direction: column; gap: 16px; }
+
+  /* Output preview */
+  #output-wrap {
+    position: relative;
+    background: #0a0a0e;
+    border-radius: 6px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+
+  #output-preview {
+    width: 100%;
+    display: block;
+    min-height: 80px;
+    object-fit: contain;
+  }
+
+  #output-empty {
+    padding: 28px;
+    text-align: center;
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .ratio-badge {
+    position: absolute;
+    top: 6px; right: 6px;
+    background: rgba(0,0,0,.7);
+    color: var(--accent-h);
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 4px;
+    backdrop-filter: blur(4px);
+  }
+
+  .export-row { display: flex; gap: 6px; margin-top: 10px; }
+
+  /* Toggles */
+  .panel-body { padding: 4px 16px; }
+
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 9px 0;
+    border-bottom: 1px solid #1a1a24;
+    font-size: 11px;
+  }
+
+  .toggle-row:last-child { border-bottom: none; }
+  .toggle-lbl { color: #888; }
+
+  .toggle { position: relative; width: 36px; height: 20px; flex-shrink: 0; }
+  .toggle input { opacity: 0; width: 0; height: 0; }
+  .toggle-track {
+    position: absolute;
+    inset: 0;
+    background: var(--border);
+    border-radius: 20px;
+    cursor: pointer;
+    transition: .2s;
+  }
+  .toggle-track::before {
+    content: '';
+    position: absolute;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: #444;
+    top: 3px; left: 3px;
+    transition: .2s;
+  }
+  .toggle input:checked + .toggle-track { background: rgba(124,109,250,.25); }
+  .toggle input:checked + .toggle-track::before { background: var(--accent-h); transform: translateX(16px); }
+
+  /* Log */
+  #log {
+    padding: 10px 16px;
+    font-size: 10px;
+    line-height: 2;
+    max-height: 130px;
+    overflow-y: auto;
+    color: var(--muted);
+  }
+
+  #log::-webkit-scrollbar { width: 3px; }
+  #log::-webkit-scrollbar-thumb { background: var(--border); }
+
+  .log-line { display: flex; gap: 8px; }
+  .log-ts   { color: #333; flex-shrink: 0; }
+  .log-ok   .log-msg { color: var(--green); }
+  .log-err  .log-msg { color: var(--red); }
+  .log-info .log-msg { color: var(--accent-h); }
+  .log-warn .log-msg { color: var(--yellow); }
+
+  /* Status */
+  .status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    background: var(--surface2);
+    color: var(--muted);
+    border: 1px solid var(--border);
+    margin-left: auto;
+  }
+  .status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); }
+  .status.loaded  .status-dot { background: var(--green); }
+  .status.loading .status-dot { background: var(--yellow); animation: blink .6s infinite alternate; }
+  @keyframes blink { to { opacity: .2; } }
+
+  /* Ratio visual icons */
+  .ri-1  { width:14px; height:14px; }
+  .ri-43 { width:16px; height:12px; }
+  .ri-34 { width:12px; height:16px; }
+  .ri-169{ width:18px; height:10px; }
+  .ri-916{ width:10px; height:18px; }
+  .ri-32 { width:18px; height:12px; }
+  .ri-219{ width:22px; height:9px; }
+
+  /* Code sample */
+  .code {
+    background: #0a0a0e;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    font-size: 10.5px;
+    line-height: 1.9;
+    color: #888;
+    margin-top: 16px;
+  }
+  .kw  { color: #fa6d8a; }
+  .fn  { color: #8888fa; }
+  .str { color: var(--green); }
+  .cm  { color: #333; font-style: italic; }
+  .prop { color: var(--yellow); }
+
+  footer {
+    padding: 20px 0;
+    border-top: 1px solid var(--border);
+    font-size: 10px;
+    color: var(--muted);
+    display: flex;
+    justify-content: space-between;
+    max-width: 1100px;
+    margin: 0 auto;
+    width: 100%;
+  }
+
+  @media (max-width: 780px) {
+    .layout { grid-template-columns: 1fr; }
+    header .right { margin: 0; text-align: left; width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <span class="logo-claude">Claude</span><span class="logo-crop">Crop</span><span class="logo-dot">.</span>
+  </div>
+  <span class="badge badge-ver">v1.0.0</span>
+  <span class="badge badge-new">Aspect Ratio</span>
+  <div class="right">
+    Sans jQuery · Pointer Events · Pinch-zoom · Ratio lock<br>
+    EventEmitter · Promise API · exportBlob()
+  </div>
+</header>
+
+<div class="layout">
+
+  <!-- ── Cropper card ── -->
+  <div>
+    <div class="card">
+      <div class="card-head">
+        <div class="trafficlight">
+          <div class="tl" style="background:#fa4a4a"></div>
+          <div class="tl" style="background:var(--yellow)"></div>
+          <div class="tl" style="background:var(--green)"></div>
+        </div>
+        <span style="margin-left:6px">zone de recadrage</span>
+        <div id="status-badge" class="status"><div class="status-dot"></div><span id="status-text">vide</span></div>
+      </div>
+
+      <!-- Ratio selector bar -->
+      <div class="ratio-bar">
+        <span class="ratio-label">ratio</span>
+
+        <button class="ratio-btn" data-ratio="null" onclick="setRatio(null)">
+          <span class="ratio-icon ri-43" style="border-style:dashed"></span>
+          Libre
+        </button>
+        <button class="ratio-btn active" data-ratio="1:1" onclick="setRatio('1:1')">
+          <span class="ratio-icon ri-1"></span>
+          1:1
+        </button>
+        <button class="ratio-btn" data-ratio="4:3" onclick="setRatio('4:3')">
+          <span class="ratio-icon ri-43"></span>
+          4:3
+        </button>
+        <button class="ratio-btn" data-ratio="3:4" onclick="setRatio('3:4')">
+          <span class="ratio-icon ri-34"></span>
+          3:4
+        </button>
+        <button class="ratio-btn" data-ratio="16:9" onclick="setRatio('16:9')">
+          <span class="ratio-icon ri-169"></span>
+          16:9
+        </button>
+        <button class="ratio-btn" data-ratio="9:16" onclick="setRatio('9:16')">
+          <span class="ratio-icon ri-916"></span>
+          9:16
+        </button>
+        <button class="ratio-btn" data-ratio="3:2" onclick="setRatio('3:2')">
+          <span class="ratio-icon ri-32"></span>
+          3:2
+        </button>
+        <button class="ratio-btn" data-ratio="21:9" onclick="setRatio('21:9')">
+          <span class="ratio-icon ri-219"></span>
+          21:9
+        </button>
+
+        <!-- Custom ratio -->
+        <div style="display:flex;gap:4px;align-items:center;margin-left:4px">
+          <input id="custom-ratio" type="text" placeholder="ex: 5:4"
+            style="width:72px;padding:5px 8px;border-radius:5px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:11px;outline:none"
+            onkeydown="if(event.key==='Enter') applyCustomRatio()">
+          <button class="btn" style="padding:5px 10px;font-size:11px" onclick="applyCustomRatio()">↵</button>
+        </div>
+      </div>
+
+      <!-- Preview -->
+      <div id="crop-root">
+        <div class="cc-preview">
+          <div class="empty-state">
+            <div class="empty-icon">🖼</div>
+            <span>Glissez une image ou cliquez "Charger"</span>
+          </div>
+        </div>
+        <input type="file" class="cc-image-input">
+      </div>
+
+      <!-- Controls -->
+      <div class="controls">
+        <div class="ctrl-row">
+          <span class="ctrl-lbl">image</span>
+          <div class="btn-group">
+            <label class="btn" for="file-proxy">↑ Charger</label>
+            <button class="btn" onclick="loadDemo()">🎲 Démo</button>
+            <button class="btn" onclick="cc.rotateCCW()">↺</button>
+            <button class="btn" onclick="cc.rotateCW()">↻</button>
+            <button class="btn" onclick="cc.reset()">⊙ Reset</button>
+          </div>
+        </div>
+
+        <div class="ctrl-row">
+          <span class="ctrl-lbl">zoom</span>
+          <input type="range" class="cc-image-zoom-input" disabled>
+          <span id="zoom-val" style="font-size:10px;color:var(--muted);width:38px;text-align:right">—</span>
+        </div>
+
+        <div class="ctrl-row" style="font-size:10px;color:var(--muted)">
+          <span class="ctrl-lbl">aide</span>
+          <span>Molette pour zoomer · Glisser pour cadrer · Pincer sur mobile</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Code snippet -->
+    <div class="code">
+<span class="kw">const</span> cc = <span class="kw">new</span> <span class="fn">ClaudeCrop</span>(<span class="str">'#crop-root'</span>, {<br>
+&nbsp;&nbsp;<span class="prop">aspectRatio</span>: <span class="str">'16:9'</span>,   <span class="cm">// '4:3' | '1:1' | '9:16' | {w,h} | null</span><br>
+&nbsp;&nbsp;<span class="prop">aspectRatioFit</span>: <span class="str">'contain'</span>, <span class="cm">// 'contain' | 'cover'</span><br>
+&nbsp;&nbsp;<span class="prop">showCropFrame</span>: <span class="kw">true</span>,<br>
+&nbsp;&nbsp;<span class="prop">maxZoom</span>: <span class="str">3</span>, <span class="prop">wheelZoom</span>: <span class="kw">true</span>, <span class="prop">pinchZoom</span>: <span class="kw">true</span>,<br>
+});<br><br>
+cc.<span class="fn">setAspectRatio</span>(<span class="str">'4:3'</span>);   <span class="cm">// dynamique</span><br>
+cc.<span class="fn">on</span>(<span class="str">'aspectratiochange'</span>, r =&gt; …);<br>
+<span class="kw">await</span> cc.<span class="fn">exportBlob</span>({ type: <span class="str">'image/jpeg'</span> }); <span class="cm">// Promise&lt;Blob&gt;</span>
+    </div>
+  </div>
+
+  <!-- ── Sidebar ── -->
+  <div class="sidebar">
+
+    <!-- Export -->
+    <div class="card">
+      <div class="card-head">export</div>
+      <div style="padding:14px 16px">
+        <div id="output-wrap">
+          <div id="output-empty">Aucun export</div>
+          <img id="output-preview" src="" alt="" style="display:none">
+          <span class="ratio-badge" id="output-ratio" style="display:none"></span>
+        </div>
+        <div class="export-row">
+          <button class="btn btn-accent" style="flex:1" onclick="doExport('image/jpeg')">⬇ JPEG</button>
+          <button class="btn" style="flex:1" onclick="doExport('image/png')">⬇ PNG</button>
+          <button class="btn btn-green" onclick="doExportBlob()">Blob</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Options -->
+    <div class="card">
+      <div class="card-head">options</div>
+      <div class="panel-body">
+        <div class="toggle-row">
+          <span class="toggle-lbl">freeMove</span>
+          <label class="toggle">
+            <input type="checkbox" onchange="cc._opts.freeMove = this.checked">
+            <span class="toggle-track"></span>
+          </label>
+        </div>
+        <div class="toggle-row">
+          <span class="toggle-lbl">showCropFrame</span>
+          <label class="toggle">
+            <input type="checkbox" checked onchange="cc._opts.showCropFrame = this.checked; cc._applyCropFrame()">
+            <span class="toggle-track"></span>
+          </label>
+        </div>
+        <div class="toggle-row">
+          <span class="toggle-lbl">aspectRatioFit</span>
+          <select style="font-family:inherit;font-size:10px;padding:4px 8px;border-radius:5px;border:1px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer"
+            onchange="cc._opts.aspectRatioFit=this.value; cc._applyCropFrame(); if(cc._imageLoaded){cc._setupZoomer();cc.centerImage();}">
+            <option value="contain">contain</option>
+            <option value="cover">cover</option>
+          </select>
+        </div>
+        <div class="toggle-row">
+          <span class="toggle-lbl">disabled</span>
+          <label class="toggle">
+            <input type="checkbox" onchange="this.checked ? cc.disable() : cc.enable()">
+            <span class="toggle-track"></span>
+          </label>
+        </div>
+        <div class="toggle-row" style="gap:10px">
+          <span class="toggle-lbl">maxZoom</span>
+          <input type="range" min="1" max="6" step="0.5" value="3" style="flex:1;accent-color:var(--accent-h)"
+            oninput="cc.maxZoom=+this.value; this.nextElementSibling.textContent=this.value+'×'">
+          <span style="font-size:10px;color:var(--muted);width:26px">3×</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Log -->
+    <div class="card">
+      <div class="card-head">events</div>
+      <div id="log"></div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <span>ClaudeCrop v1.0.0 — vanilla ES6+, zéro dépendance</span>
+  <span>Pointer Events · Pinch · Wheel · Ratio Lock · EventEmitter</span>
+</footer>
+
+<!-- Hidden file proxy -->
+<input type="file" id="file-proxy" accept="image/*" style="display:none"
+  onchange="document.querySelector('.cc-image-input').files=this.files; document.querySelector('.cc-image-input').dispatchEvent(new Event('change'))">
+
+<script>
+/* ════════════════════════════════════════════════════════════
+   ClaudeCrop v1.0.0  —  inline bundle
+   ════════════════════════════════════════════════════════════ */
+(function(root, factory){
+  root.ClaudeCrop = factory();
+})(window, function(){
+  'use strict';
+
+  const ERRORS = {
+    IMAGE_FAILED_TO_LOAD: { code:0, message:'Image failed to load.' },
+    SMALL_IMAGE:          { code:1, message:'Image is too small.' },
+    INVALID_FILE:         { code:2, message:'File is not a valid image.' },
+  };
+
+  const CLASS = {
+    PREVIEW:'cc-preview', IMAGE_CONTAINER:'cc-preview-image-container',
+    PREVIEW_IMAGE:'cc-preview-image', BG_CONTAINER:'cc-preview-background-container',
+    BG_IMAGE:'cc-preview-background', CROP_OVERLAY:'cc-crop-overlay',
+    CROP_FRAME:'cc-crop-frame', IMAGE_LOADING:'cc-image-loading',
+    IMAGE_LOADED:'cc-image-loaded', DRAG_HOVERED:'cc-drag-hovered', DISABLED:'cc-disabled',
+  };
+
+  const clamp  = (v,a,b) => Math.max(a,Math.min(b,v));
+  const round2 = x => Math.round(x*100)/100;
+  const exists = v => v!==undefined && v!==null;
+
+  function normalizeEl(el, root){
+    if(!el) return null;
+    if(typeof el==='string') return (root||document).querySelector(el);
+    return el instanceof Element ? el : null;
+  }
+  function css(el,s){ Object.assign(el.style,s); }
+  function mk(tag,cls,s={}){ const e=document.createElement(tag); if(cls) e.className=cls; css(e,s); return e; }
+
+  function parseRatio(r){
+    if(!r) return null;
+    if(typeof r==='number') return r>0?{w:r,h:1}:null;
+    if(typeof r==='string'){
+      const p=r.split(':').map(Number);
+      if(p.length===2&&p[0]>0&&p[1]>0) return{w:p[0],h:p[1]};
+      return null;
+    }
+    if(typeof r==='object'){
+      const w=r.w||r.width, h=r.h||r.height;
+      if(w>0&&h>0) return{w,h};
+    }
+    return null;
+  }
+
+  class EventEmitter {
+    constructor(){ this._L={}; }
+    on(e,f){ (this._L[e]=this._L[e]||[]).push({f,once:false}); return this; }
+    once(e,f){ (this._L[e]=this._L[e]||[]).push({f,once:true}); return this; }
+    off(e,f){ if(this._L[e]) this._L[e]=this._L[e].filter(l=>l.f!==f); return this; }
+    emit(e,...a){ (this._L[e]||[]).slice().forEach(l=>{ l.f(...a); if(l.once) this.off(e,l.f); }); return this; }
+  }
+
+  class Zoomer {
+    constructor(){ this.minZoom=this.maxZoom=1; }
+    setup({imageSize,previewSize,exportZoom=1,maxZoom=1,minZoom='fill',smallImage='reject'}){
+      if(!imageSize||!previewSize) return;
+      const wR=previewSize.width/imageSize.width, hR=previewSize.height/imageSize.height;
+      this.minZoom = minZoom==='fit'?Math.min(wR,hR):minZoom==='fill'?Math.max(wR,hR):Number(minZoom)||Math.max(wR,hR);
+      if(smallImage==='allow') this.minZoom=Math.min(this.minZoom,1);
+      this.maxZoom=Math.max(this.minZoom,maxZoom/exportZoom);
+    }
+    clamp(z){ return clamp(z,this.minZoom,this.maxZoom); }
+    sliderToZoom(p){ return this.minZoom===this.maxZoom?this.minZoom:p*(this.maxZoom-this.minZoom)+this.minZoom; }
+    zoomToSlider(z){ return this.minZoom===this.maxZoom?0:(z-this.minZoom)/(this.maxZoom-this.minZoom); }
+    isZoomable(){ return this.minZoom!==this.maxZoom; }
+  }
+
+  class ClaudeCrop extends EventEmitter {
+    constructor(el, opts={}){
+      super();
+      this._el = normalizeEl(el)||(typeof el==='string'?document.querySelector(el):el);
+      if(!this._el) throw new Error('[ClaudeCrop] Invalid element.');
+
+      this._opts = Object.assign({
+        previewEl:'.'+CLASS.PREVIEW, fileInputEl:'input.cc-image-input', zoomSliderEl:'input.cc-image-zoom-input',
+        width:null, height:null,
+        minZoom:'fill', maxZoom:1, initialZoom:'min', exportZoom:1,
+        wheelZoom:true, pinchZoom:true, freeMove:false, allowDragNDrop:true, smallImage:'allow',
+        aspectRatio:null, aspectRatioFit:'contain', showCropFrame:true,
+        imageBackground:false, imageBackgroundBorderWidth:[0,0,0,0], imageState:null,
+        onFileChange:()=>{}, onFileReaderError:()=>{}, onImageLoading:()=>{},
+        onImageLoaded:()=>{}, onImageError:()=>{}, onZoomEnabled:()=>{},
+        onZoomDisabled:()=>{}, onZoomChange:()=>{}, onOffsetChange:()=>{},
+        onAspectRatioChange:()=>{},
+      }, opts);
+
+      this._zoomer=new Zoomer(); this._imageLoaded=false; this._zoom=1;
+      this._offset={x:0,y:0}; this._rotation=0;
+      this._aspectRatio=parseRatio(this._opts.aspectRatio);
+      this._image=new Image(); this._preImage=new Image();
+      this._image.crossOrigin=this._preImage.crossOrigin='anonymous';
+      this._image.onload=()=>this._onImageLoaded();
+      this._preImage.onload=()=>this._onPreImageLoaded();
+      this._image.onerror=this._preImage.onerror=()=>this._onImageError(ERRORS.IMAGE_FAILED_TO_LOAD);
+      this._init();
+    }
+
+    _init(){
+      this._preview    = normalizeEl(this._opts.previewEl,this._el)||this._el.querySelector('.'+CLASS.PREVIEW)||this._el;
+      this._fileInput  = normalizeEl(this._opts.fileInputEl,this._el);
+      this._zoomSlider = normalizeEl(this._opts.zoomSliderEl,this._el);
+      this._previewSize = { width:this._opts.width||this._preview.clientWidth, height:this._opts.height||this._preview.clientHeight };
+      css(this._preview,{position:'relative',overflow:'hidden'});
+
+      this._imgEl = mk('img',CLASS.PREVIEW_IMAGE,{position:'absolute',transformOrigin:'top left',willChange:'transform',userSelect:'none',pointerEvents:'none'});
+      this._imgEl.alt='';
+      this._imgContainer = mk('div',CLASS.IMAGE_CONTAINER,{position:'absolute',inset:'0',cursor:'grab',touchAction:'none'});
+      this._imgContainer.appendChild(this._imgEl);
+      this._preview.appendChild(this._imgContainer);
+
+      if(this._opts.imageBackground){
+        const bw=Array.isArray(this._opts.imageBackgroundBorderWidth)?this._opts.imageBackgroundBorderWidth:[0,1,2,3].map(()=>this._opts.imageBackgroundBorderWidth);
+        this._bgEl=mk('img',CLASS.BG_IMAGE,{position:'absolute',transformOrigin:'top left',willChange:'transform',pointerEvents:'none',filter:'blur(8px)',opacity:'0.45',left:bw[3]+'px',top:bw[0]+'px'});
+        this._bgEl.alt='';
+        this._bgContainer=mk('div',CLASS.BG_CONTAINER,{position:'absolute',zIndex:'0',top:-bw[0]+'px',right:-bw[1]+'px',bottom:-bw[2]+'px',left:-bw[3]+'px',overflow:'hidden'});
+        this._bgContainer.appendChild(this._bgEl);
+        this._preview.prepend(this._bgContainer);
+      }
+
+      if(this._fileInput) this._fileInput.setAttribute('accept','image/*');
+      if(this._zoomSlider){ this._zoomSlider.min='0'; this._zoomSlider.max='1'; this._zoomSlider.step='0.001'; }
+
+      this._initialZoom = this._opts.initialZoom==='image'?1:0;
+      this._buildCropFrame();
+      this._applyCropFrame();
+      this._bindListeners();
+      if(this._opts.imageState&&this._opts.imageState.src) this.loadImage(this._opts.imageState.src);
+    }
+
+    _buildCropFrame(){
+      this._cropOverlay=mk('div',CLASS.CROP_OVERLAY,{position:'absolute',inset:'0',pointerEvents:'none',zIndex:'10'});
+      const cs={position:'absolute',background:'rgba(0,0,0,0.55)',backdropFilter:'blur(1px)',transition:'all .22s ease'};
+      this._curtains={
+        top:   mk('div','',{...cs}), right: mk('div','',{...cs}),
+        bottom:mk('div','',{...cs}), left:  mk('div','',{...cs}),
+      };
+      Object.values(this._curtains).forEach(c=>this._cropOverlay.appendChild(c));
+
+      this._cropFrame=mk('div',CLASS.CROP_FRAME,{
+        position:'absolute',boxSizing:'border-box',
+        border:'1.5px solid rgba(255,255,255,0.9)',pointerEvents:'none',
+        transition:'all .22s ease',boxShadow:'0 0 0 1px rgba(0,0,0,0.4), inset 0 0 0 1px rgba(255,255,255,0.05)',
+      });
+
+      // Rule-of-thirds
+      for(let i=1;i<=2;i++){
+        this._cropFrame.appendChild(mk('div','',{position:'absolute',top:'0',bottom:'0',left:(i*100/3)+'%',width:'1px',background:'rgba(255,255,255,0.15)'}));
+        this._cropFrame.appendChild(mk('div','',{position:'absolute',left:'0',right:'0',top:(i*100/3)+'%',height:'1px',background:'rgba(255,255,255,0.15)'}));
+      }
+
+      // Corner handles
+      [{top:'-5px',left:'-5px'},{top:'-5px',right:'-5px'},{bottom:'-5px',left:'-5px'},{bottom:'-5px',right:'-5px'}].forEach(p=>{
+        const h=mk('div','',{position:'absolute',width:'12px',height:'12px',background:'#fff',borderRadius:'2px',boxShadow:'0 1px 4px rgba(0,0,0,0.5)',...p});
+        this._cropFrame.appendChild(h);
+      });
+
+      // Edge handles (middle of each side)
+      [{top:'calc(50% - 6px)',left:'-5px'},{top:'calc(50% - 6px)',right:'-5px'},
+       {top:'-5px',left:'calc(50% - 6px)'},{bottom:'-5px',left:'calc(50% - 6px)'}].forEach(p=>{
+        const h=mk('div','',{position:'absolute',width:'12px',height:'12px',background:'rgba(255,255,255,0.8)',borderRadius:'2px',boxShadow:'0 1px 3px rgba(0,0,0,0.4)',...p});
+        this._cropFrame.appendChild(h);
+      });
+
+      this._cropOverlay.appendChild(this._cropFrame);
+      this._preview.appendChild(this._cropOverlay);
+    }
+
+    _applyCropFrame(){
+      const pw=this._previewSize.width, ph=this._previewSize.height;
+
+      if(!this._aspectRatio){
+        this._cropRect={x:0,y:0,width:pw,height:ph};
+        css(this._cropOverlay,{display:'none'});
+        return;
+      }
+
+      css(this._cropOverlay,{display:this._opts.showCropFrame?'block':'none'});
+
+      const {w:rw,h:rh}=this._aspectRatio;
+      const tr=rw/rh, pr=pw/ph;
+      let cw,ch;
+
+      if(this._opts.aspectRatioFit==='cover'){
+        if(tr>pr){ cw=pw; ch=pw/tr; } else { ch=ph; cw=ph*tr; }
+      } else {
+        if(tr>pr){ cw=pw; ch=pw/tr; } else { ch=ph; cw=ph*tr; }
+      }
+
+      cw=Math.round(cw); ch=Math.round(ch);
+      const cx=Math.round((pw-cw)/2), cy=Math.round((ph-ch)/2);
+      this._cropRect={x:cx,y:cy,width:cw,height:ch};
+
+      css(this._curtains.top,    {top:'0',left:'0',right:'0',height:cy+'px'});
+      css(this._curtains.bottom, {bottom:'0',left:'0',right:'0',height:(ph-cy-ch)+'px'});
+      css(this._curtains.left,   {top:cy+'px',left:'0',width:cx+'px',height:ch+'px'});
+      css(this._curtains.right,  {top:cy+'px',right:'0',width:(pw-cx-cw)+'px',height:ch+'px'});
+      css(this._cropFrame,       {top:cy+'px',left:cx+'px',width:cw+'px',height:ch+'px'});
+    }
+
+    _bindListeners(){
+      this._h={
+        fileChange:  this._onFileChange.bind(this),
+        pointerDown: this._onPointerDown.bind(this),
+        pointerMove: this._onPointerMove.bind(this),
+        pointerUp:   this._onPointerUp.bind(this),
+        wheel:       this._onWheel.bind(this),
+        dragover:    this._onDragOver.bind(this),
+        drop:        this._onDrop.bind(this),
+        dragleave:   this._onDragLeave.bind(this),
+        slider:      this._onSliderChange.bind(this),
+      };
+      if(this._fileInput) this._fileInput.addEventListener('change',this._h.fileChange);
+      this._imgContainer.addEventListener('pointerdown',  this._h.pointerDown);
+      this._imgContainer.addEventListener('pointermove',  this._h.pointerMove);
+      this._imgContainer.addEventListener('pointerup',    this._h.pointerUp);
+      this._imgContainer.addEventListener('pointercancel',this._h.pointerUp);
+      if(this._opts.wheelZoom) this._imgContainer.addEventListener('wheel',this._h.wheel,{passive:false});
+      if(this._opts.allowDragNDrop){
+        this._imgContainer.addEventListener('dragover', this._h.dragover);
+        this._imgContainer.addEventListener('drop',     this._h.drop);
+        this._imgContainer.addEventListener('dragleave',this._h.dragleave);
+      }
+      if(this._zoomSlider) this._zoomSlider.addEventListener('input',this._h.slider);
+    }
+
+    _unbindListeners(){
+      if(this._fileInput) this._fileInput.removeEventListener('change',this._h.fileChange);
+      ['pointerdown','pointermove','pointerup','pointercancel'].forEach(ev=>
+        this._imgContainer.removeEventListener(ev, ev==='pointerdown'?this._h.pointerDown:ev==='pointermove'?this._h.pointerMove:this._h.pointerUp)
+      );
+      this._imgContainer.removeEventListener('wheel',   this._h.wheel);
+      this._imgContainer.removeEventListener('dragover',this._h.dragover);
+      this._imgContainer.removeEventListener('drop',    this._h.drop);
+      this._imgContainer.removeEventListener('dragleave',this._h.dragleave);
+      if(this._zoomSlider) this._zoomSlider.removeEventListener('input',this._h.slider);
+    }
+
+    _onFileChange(e){
+      const f=e.target.files&&e.target.files[0];
+      this._opts.onFileChange(e); this.emit('filechange',e);
+      if(f) this._loadFile(f);
+    }
+
+    _loadFile(file){
+      if(!file||!file.type.startsWith('image/')){
+        this._onImageError(ERRORS.INVALID_FILE); this._opts.onFileReaderError(); this.emit('filereaderror'); return;
+      }
+      const r=new FileReader();
+      r.onload=e=>this.loadImage(e.target.result);
+      r.onerror=()=>{this._opts.onFileReaderError(); this.emit('filereaderror');};
+      r.readAsDataURL(file);
+    }
+
+    loadImage(src){
+      if(!src) return Promise.reject(new Error('No src'));
+      this._opts.onImageLoading(); this.emit('imageloading'); this._setLoadingClass();
+      return new Promise((res,rej)=>{
+        this._loadResolve=res; this._loadReject=rej;
+        if(src.startsWith('data:')||src.startsWith('blob:')){ this._preImage.src=src; }
+        else {
+          fetch(src).then(r=>r.ok?r.blob():Promise.reject())
+            .then(b=>{ this._preImage.src=URL.createObjectURL(b); })
+            .catch(()=>this._onImageError(ERRORS.IMAGE_FAILED_TO_LOAD));
+        }
+      });
+    }
+
+    _onPreImageLoaded(){
+      if(this._shouldRejectImage({imageWidth:this._preImage.naturalWidth,imageHeight:this._preImage.naturalHeight})){
+        this._onImageError(ERRORS.SMALL_IMAGE); if(this._image.src) this._setLoadedClass(); return;
+      }
+      this._image.src=this._preImage.src;
+    }
+
+    _onImageLoaded(){
+      this._rotation=0;
+      this._setupZoomer(this._opts.imageState&&exists(this._opts.imageState.zoom)?this._opts.imageState.zoom:this._initialZoom);
+      if(this._opts.imageState&&this._opts.imageState.offset) this.offset=this._opts.imageState.offset;
+      else this.centerImage();
+      this._opts.imageState={};
+      this._imgEl.src=this._image.src;
+      if(this._bgEl) this._bgEl.src=this._image.src;
+      this._setLoadedClass(); this._imageLoaded=true;
+      this._opts.onImageLoaded(); this.emit('imageloaded');
+      if(this._loadResolve){this._loadResolve();this._loadResolve=null;}
+    }
+
+    _onImageError(err){
+      this._removeLoadingClass(); this._opts.onImageError(err); this.emit('imageerror',err);
+      if(this._loadReject){this._loadReject(err);this._loadReject=null;}
+    }
+
+    _onPointerDown(e){
+      if(!this._imageLoaded||e.button>0) return;
+      this._activePointers=this._activePointers||new Map();
+      this._activePointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+      this._imgContainer.setPointerCapture(e.pointerId);
+      if(this._activePointers.size===1){
+        this._dragOrigin={x:e.clientX,y:e.clientY}; this._moveContinue=true;
+        this._imgContainer.style.cursor='grabbing';
+      }
+      if(this._activePointers.size===2&&this._opts.pinchZoom){
+        this._pinchStartDist=this._getPinchDist(); this._pinchStartZoom=this._zoom; this._moveContinue=false;
+      }
+      e.preventDefault();
+    }
+
+    _onPointerMove(e){
+      if(!this._imageLoaded||!this._activePointers||!this._activePointers.has(e.pointerId)) return;
+      this._activePointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+      if(this._activePointers.size===2&&this._opts.pinchZoom){
+        this.zoom=this._pinchStartZoom*(this._getPinchDist()/(this._pinchStartDist||1)); return;
+      }
+      if(this._moveContinue&&this._activePointers.size===1){
+        this.offset={x:this._offset.x+e.clientX-this._dragOrigin.x, y:this._offset.y+e.clientY-this._dragOrigin.y};
+        this._dragOrigin={x:e.clientX,y:e.clientY};
+      }
+      e.preventDefault();
+    }
+
+    _onPointerUp(e){
+      if(this._activePointers) this._activePointers.delete(e.pointerId);
+      if(!this._activePointers||this._activePointers.size===0){
+        this._moveContinue=false; this._imgContainer.style.cursor='grab';
+      }
+    }
+
+    _getPinchDist(){
+      if(!this._activePointers||this._activePointers.size<2) return 0;
+      const[a,b]=[...this._activePointers.values()];
+      return Math.hypot(a.x-b.x,a.y-b.y);
+    }
+
+    _onWheel(e){
+      if(!this._imageLoaded) return; e.preventDefault();
+      const d=e.deltaY>0?-0.05:0.05;
+      const rect=this._preview.getBoundingClientRect();
+      const mx=e.clientX-rect.left, my=e.clientY-rect.top;
+      const oldZ=this._zoom;
+      const newZ=this._zoomer.clamp(oldZ+d*(this._zoomer.maxZoom-this._zoomer.minZoom));
+      if(newZ===oldZ) return;
+      const ratio=newZ/oldZ; this._zoom=newZ;
+      this.offset={x:mx-(mx-this._offset.x)*ratio, y:my-(my-this._offset.y)*ratio};
+      this._syncSlider(); this._opts.onZoomChange(newZ); this.emit('zoomchange',newZ);
+    }
+
+    _onDragOver(e){ e.preventDefault(); e.dataTransfer.dropEffect='copy'; this._preview.classList.add(CLASS.DRAG_HOVERED); }
+    _onDragLeave(){ this._preview.classList.remove(CLASS.DRAG_HOVERED); }
+    _onDrop(e){
+      e.preventDefault(); e.stopPropagation(); this._preview.classList.remove(CLASS.DRAG_HOVERED);
+      const f=[...e.dataTransfer.files].find(f=>f.type.startsWith('image/')); if(f) this._loadFile(f);
+    }
+
+    _onSliderChange(){
+      if(!this._imageLoaded) return;
+      const z=this._zoomer.sliderToZoom(+this._zoomSlider.value); if(z!==this._zoom) this.zoom=z;
+    }
+
+    _syncSlider(){ if(this._zoomSlider) this._zoomSlider.value=this._zoomer.zoomToSlider(this._zoom); }
+
+    _setupZoomer(tz){
+      const cr=this._cropRect||{x:0,y:0,width:this._previewSize.width,height:this._previewSize.height};
+      this._zoomer.setup({
+        imageSize:this.imageSize,
+        previewSize:{width:cr.width,height:cr.height},
+        exportZoom:this._opts.exportZoom, maxZoom:this._opts.maxZoom,
+        minZoom:this._opts.minZoom, smallImage:this._opts.smallImage,
+      });
+      this._zoom=exists(tz)?this._zoomer.clamp(tz):this._zoom;
+      this._syncSlider();
+      this._zoomer.isZoomable()?this._enableSlider():this._disableSlider();
+    }
+
+    _fixOffset({x,y}){
+      if(!this._imageLoaded) return{x,y};
+      const iw=this.imageWidth*this._zoom, ih=this.imageHeight*this._zoom;
+      const cr=this._cropRect||{x:0,y:0,width:this._previewSize.width,height:this._previewSize.height};
+      if(!this._opts.freeMove){
+        const mnX=cr.x+cr.width-iw,  mxX=cr.x;
+        const mnY=cr.y+cr.height-ih, mxY=cr.y;
+        x=iw>=cr.width ?clamp(x,mnX,mxX):clamp(x,mxX,mnX);
+        y=ih>=cr.height?clamp(y,mnY,mxY):clamp(y,mxY,mnY);
+      }
+      return{x:round2(x),y:round2(y)};
+    }
+
+    _renderImage(){
+      const{x,y}=this._rotatedOffset;
+      const t=`translate(${x}px,${y}px) scale(${this._zoom}) rotate(${this._rotation}deg)`;
+      css(this._imgEl,{transform:t}); if(this._bgEl) css(this._bgEl,{transform:t});
+    }
+
+    get _rotatedOffset(){
+      const{x,y}=this._offset, iw=this._image.naturalWidth, ih=this._image.naturalHeight, z=this._zoom, r=this._rotation;
+      return{x:x+(r===90?ih*z:0)+(r===180?iw*z:0), y:y+(r===180?ih*z:0)+(r===270?iw*z:0)};
+    }
+
+    _setLoadingClass()  { this._preview.classList.remove(CLASS.IMAGE_LOADED); this._preview.classList.add(CLASS.IMAGE_LOADING); }
+    _setLoadedClass()   { this._preview.classList.remove(CLASS.IMAGE_LOADING); this._preview.classList.add(CLASS.IMAGE_LOADED); }
+    _removeLoadingClass(){ this._preview.classList.remove(CLASS.IMAGE_LOADING); }
+    _enableSlider()  { if(this._zoomSlider) this._zoomSlider.removeAttribute('disabled'); this._opts.onZoomEnabled(); this.emit('zoomenabled'); }
+    _disableSlider() { if(this._zoomSlider) this._zoomSlider.setAttribute('disabled',true); this._opts.onZoomDisabled(); this.emit('zoomdisabled'); }
+    _shouldRejectImage({imageWidth:iw,imageHeight:ih}){
+      if(this._opts.smallImage!=='reject') return false;
+      return iw*this._opts.maxZoom<this._previewSize.width*this._opts.exportZoom||ih*this._opts.maxZoom<this._previewSize.height*this._opts.exportZoom;
+    }
+
+    /* ── Public ── */
+    centerImage(){
+      if(!this._image.naturalWidth||!this._zoom) return;
+      const cr=this._cropRect||{x:0,y:0,width:this._previewSize.width,height:this._previewSize.height};
+      this.offset={x:cr.x+(cr.width-this.imageWidth*this._zoom)/2, y:cr.y+(cr.height-this.imageHeight*this._zoom)/2};
+    }
+
+    rotateCW()  { this._rotation=(this._rotation+90)%360;  if(this._imageLoaded){this._setupZoomer();this.centerImage();} }
+    rotateCCW() { this._rotation=(this._rotation+270)%360; if(this._imageLoaded){this._setupZoomer();this.centerImage();} }
+    reset()     { if(!this._imageLoaded)return; this._rotation=0; this._setupZoomer(this._initialZoom); this.centerImage(); }
+    disable()   { this._unbindListeners(); this._disableSlider(); this._el.classList.add(CLASS.DISABLED); }
+    enable()    { this._bindListeners(); if(this._zoomer.isZoomable())this._enableSlider(); this._el.classList.remove(CLASS.DISABLED); }
+    isZoomable(){ return this._zoomer.isZoomable(); }
+    destroy()   { this._unbindListeners(); this._imgContainer.remove(); if(this._bgContainer)this._bgContainer.remove(); if(this._cropOverlay)this._cropOverlay.remove(); }
+
+    setAspectRatio(r){
+      this._aspectRatio=parseRatio(r); this._opts.aspectRatio=r;
+      this._applyCropFrame();
+      if(this._imageLoaded){ this._setupZoomer(); this.centerImage(); }
+      this._opts.onAspectRatioChange(this._aspectRatio); this.emit('aspectratiochange',this._aspectRatio);
+    }
+
+    getAspectRatio(){ return this._aspectRatio?{...this._aspectRatio}:null; }
+
+    export(opts={}){
+      if(!this._image.src) return null;
+      opts=Object.assign({type:'image/png',quality:.92,originalSize:false,fillBg:'#fff'},opts);
+      const ez=opts.originalSize?1/this._zoom:this._opts.exportZoom;
+      const cr=this._cropRect||{x:0,y:0,width:this._previewSize.width,height:this._previewSize.height};
+      const canvas=document.createElement('canvas');
+      canvas.width=cr.width*ez; canvas.height=cr.height*ez;
+      const ctx=canvas.getContext('2d');
+      if(opts.type==='image/jpeg'){ctx.fillStyle=opts.fillBg; ctx.fillRect(0,0,canvas.width,canvas.height);}
+      ctx.save();
+      ctx.translate((this._rotatedOffset.x-cr.x)*ez,(this._rotatedOffset.y-cr.y)*ez);
+      ctx.rotate(this._rotation*Math.PI/180);
+      ctx.drawImage(this._image,0,0,this._zoom*ez*this._image.naturalWidth,this._zoom*ez*this._image.naturalHeight);
+      ctx.restore();
+      return canvas.toDataURL(opts.type,opts.quality);
+    }
+
+    exportBlob(opts={}){
+      return new Promise((res,rej)=>{
+        const d=this.export(opts); if(!d) return rej(new Error('No image'));
+        fetch(d).then(r=>r.blob()).then(res).catch(rej);
+      });
+    }
+
+    get zoom(){ return this._zoom; }
+    set zoom(v){
+      v=this._zoomer.clamp(v);
+      if(this._imageLoaded&&this._offset){
+        const old=this._zoom, cx=this._previewSize.width/2, cy=this._previewSize.height/2;
+        this._zoom=v;
+        this.offset={x:cx-(cx-this._offset.x)*v/old, y:cy-(cy-this._offset.y)*v/old};
+      } else this._zoom=v;
+      this._syncSlider(); this._opts.onZoomChange(v); this.emit('zoomchange',v);
+    }
+
+    get offset(){ return this._offset; }
+    set offset(p){
+      if(!p||!exists(p.x)||!exists(p.y)) return;
+      this._offset=this._fixOffset(p); this._renderImage();
+      this._opts.onOffsetChange(this._offset); this.emit('offsetchange',this._offset);
+    }
+
+    get imageSrc(){ return this._image.src; } set imageSrc(s){ this.loadImage(s); }
+    get imageState(){ return{src:this._image.src,offset:this._offset,zoom:this._zoom}; }
+    get imageWidth(){ return this._rotation%180===0?this._image.naturalWidth:this._image.naturalHeight; }
+    get imageHeight(){ return this._rotation%180===0?this._image.naturalHeight:this._image.naturalWidth; }
+    get imageSize(){ return{width:this.imageWidth,height:this.imageHeight}; }
+    get previewSize(){ return{...this._previewSize}; }
+    set previewSize(s){ if(!s||s.width<=0||s.height<=0)return; this._previewSize={width:s.width,height:s.height}; css(this._preview,{width:s.width+'px',height:s.height+'px'}); this._applyCropFrame(); if(this._imageLoaded)this._setupZoomer(); }
+    get minZoom(){ return this._opts.minZoom; } set minZoom(v){ this._opts.minZoom=v; this._setupZoomer(); }
+    get maxZoom(){ return this._opts.maxZoom; } set maxZoom(v){ this._opts.maxZoom=v; this._setupZoomer(); }
+    get exportZoom(){ return this._opts.exportZoom; } set exportZoom(v){ this._opts.exportZoom=v; this._setupZoomer(); }
+    get rotation(){ return this._rotation; }
+    get aspectRatio(){ return this._aspectRatio; } set aspectRatio(v){ this.setAspectRatio(v); }
+    get cropRect(){ return this._cropRect?{...this._cropRect}:null; }
+  }
+
+  ClaudeCrop.ERRORS=ERRORS; ClaudeCrop.parseRatio=parseRatio; ClaudeCrop.version='1.0.0';
+  ClaudeCrop.RATIOS={ FREE:null, SQUARE:'1:1', R4_3:'4:3', R3_4:'3:4', R16_9:'16:9', R9_16:'9:16', R3_2:'3:2', R2_3:'2:3', R21_9:'21:9', GOLDEN:'1.618:1' };
+  return ClaudeCrop;
+});
+</script>
+
+<script>
+/* ── App ── */
+
+const log = document.getElementById('log');
+function logEntry(msg, type='info'){
+  const ts = new Date().toLocaleTimeString('fr',{hour12:false});
+  const d  = document.createElement('div');
+  d.className = 'log-line log-'+type;
+  d.innerHTML = `<span class="log-ts">${ts}</span><span class="log-msg">${msg}</span>`;
+  log.prepend(d);
+  if(log.children.length>40) log.lastChild.remove();
+}
+
+const badge   = document.getElementById('status-badge');
+const badgeTxt= document.getElementById('status-text');
+const zoomVal = document.getElementById('zoom-val');
+
+function setStatus(s,cls){ badge.className='status '+cls; badgeTxt.textContent=s; }
+
+/* Instanciation */
+const cc = new ClaudeCrop('#crop-root', {
+  aspectRatio:    '1:1',
+  aspectRatioFit: 'contain',
+  showCropFrame:  true,
+  maxZoom:        3,
+  minZoom:        'fill',
+  smallImage:     'allow',
+  wheelZoom:      true,
+  pinchZoom:      true,
+
+  onImageLoading: ()=>{ setStatus('chargement…','loading'); logEntry('↻ Chargement…','info'); },
+  onImageLoaded:  ()=>{ setStatus('chargée','loaded');      logEntry('✓ Image chargée','ok'); },
+  onImageError:   e => { setStatus('erreur','');            logEntry('✗ '+e.message,'err'); },
+  onZoomEnabled:  ()=> logEntry('⊕ Zoom activé','info'),
+  onZoomDisabled: ()=> logEntry('⊖ Zoom désactivé','info'),
+  onZoomChange:   z => { zoomVal.textContent = (z*100).toFixed(0)+'%'; },
+  onAspectRatioChange: r => logEntry(`⬡ Ratio → ${r?r.w+':'+r.h:'Libre'}`, 'warn'),
+});
+
+/* Ratio button logic */
+function setRatio(r){
+  cc.setAspectRatio(r);
+  document.querySelectorAll('.ratio-btn').forEach(b => {
+    const v = b.dataset.ratio;
+    b.classList.toggle('active', (r===null && v==='null') || v===r);
+  });
+  logEntry(`⬡ Ratio: ${r||'Libre'}`, 'warn');
+}
+
+function applyCustomRatio(){
+  const val = document.getElementById('custom-ratio').value.trim();
+  if(!val){ logEntry('⚠ Format invalide','err'); return; }
+  document.querySelectorAll('.ratio-btn').forEach(b=>b.classList.remove('active'));
+  cc.setAspectRatio(val);
+  logEntry(`⬡ Ratio custom: ${val}`, 'warn');
+}
+
+/* Demo images */
+const DEMOS = [
+  'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1200&q=80',
+  'https://images.unsplash.com/photo-1518020382113-a7e8fc38eac9?w=1200&q=80',
+  'https://images.unsplash.com/photo-1529778873920-4da4926a72c2?w=1200&q=80',
+  'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=1200&q=80',
+];
+let demoIdx=0;
+
+function loadDemo(){
+  cc.loadImage(DEMOS[demoIdx++%DEMOS.length])
+    .then(()=>logEntry('✓ Démo chargée','ok'))
+    .catch(e=>logEntry('✗ '+(e.message||e),'err'));
+}
+
+/* Export */
+function doExport(type){
+  const data = cc.export({ type, quality:.92 });
+  if(!data){ logEntry('✗ Aucune image','err'); return; }
+
+  const prev  = document.getElementById('output-preview');
+  const empty = document.getElementById('output-empty');
+  const rb    = document.getElementById('output-ratio');
+  prev.src    = data;
+  prev.style.display='block'; empty.style.display='none';
+
+  const ar = cc.getAspectRatio();
+  if(ar){ rb.textContent=ar.w+':'+ar.h; rb.style.display='block'; }
+  else rb.style.display='none';
+
+  const a=document.createElement('a');
+  a.href=data; a.download='claudecrop.'+(type==='image/jpeg'?'jpg':'png'); a.click();
+  logEntry(`⬇ Export ${type==='image/jpeg'?'JPEG':'PNG'}`,'ok');
+}
+
+async function doExportBlob(){
+  try{
+    const blob = await cc.exportBlob({type:'image/png'});
+    const url  = URL.createObjectURL(blob);
+    const prev = document.getElementById('output-preview');
+    const empty= document.getElementById('output-empty');
+    prev.src=url; prev.style.display='block'; empty.style.display='none';
+    logEntry(`✓ Blob: ${(blob.size/1024).toFixed(1)} KB`,'ok');
+    setTimeout(()=>URL.revokeObjectURL(url),60000);
+  } catch(e){ logEntry('✗ '+(e.message||e),'err'); }
+}
+
+logEntry('ClaudeCrop v1.0.0 prêt','ok');
+</script>
+</body>
+</html>

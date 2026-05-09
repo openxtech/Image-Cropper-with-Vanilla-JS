@@ -1,5 +1,9 @@
 /*!
+<<<<<<< HEAD
  * ClaudeCrop - v1.0.2
+=======
+ * ClaudeCrop - v1.0.0
+>>>>>>> b730ee2844fa63eaaa0dae7675b4b48ef19e6487
  * A flexible, jQuery-free image cropping plugin with aspect ratio support
  *
  * Features:
