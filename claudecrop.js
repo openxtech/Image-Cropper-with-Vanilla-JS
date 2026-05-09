@@ -1,5 +1,5 @@
 /*!
- * ClaudeCrop - v1.0.1
+ * ClaudeCrop - v1.0.2
  * A flexible, jQuery-free image cropping plugin with aspect ratio support
  *
  * Features:
@@ -7,7 +7,7 @@
  *  - Pointer Events API (mouse + touch + stylus unified)
  *  - Pinch-to-zoom support
  *  - Mouse wheel zoom
- *  - Promise-based image loading
+ *  - Promise-based image loading with load-source context ('api' | 'fileinput' | 'dragdrop' | 'restore')
  *  - EventEmitter API (.on / .off / .once)
  *  - exportBlob() for async Blob export
  *  - Full rotation support
@@ -328,7 +328,7 @@
       if (this._opts.locked) this.lock();
 
       if (this._opts.imageState && this._opts.imageState.src) {
-        this.loadImage(this._opts.imageState.src);
+        this.loadImage(this._opts.imageState.src, 'restore');
       }
     }
 
@@ -497,24 +497,32 @@
     _onFileChange(e) {
       const file = e.target.files && e.target.files[0];
       this._opts.onFileChange(e); this.emit('filechange', e);
-      if (file) this._loadFile(file);
+      if (file) this._loadFile(file, 'fileinput');
     }
 
-    _loadFile(file) {
+    _loadFile(file, source = 'api') {
       if (!file || !file.type.startsWith('image/')) {
         this._onImageError(ERRORS.INVALID_FILE);
         this._opts.onFileReaderError(); this.emit('filereaderror');
         return;
       }
       const reader = new FileReader();
-      reader.onload  = e => this.loadImage(e.target.result);
+      reader.onload  = e => this.loadImage(e.target.result, source);
       reader.onerror = () => { this._opts.onFileReaderError(); this.emit('filereaderror'); };
       reader.readAsDataURL(file);
     }
 
-    loadImage(src) {
+    /**
+     * Load an image by URL or data URI.
+     * @param {string} src
+     * @param {'api'|'fileinput'|'dragdrop'|'restore'} [source='api']
+     *   Origin of the load request. Passed to onImageLoaded / 'imageloaded' event.
+     * @returns {Promise<void>}
+     */
+    loadImage(src, source = 'api') {
       if (!src) return Promise.reject(new Error('No src provided'));
 
+      this._loadSource = source;
       this._opts.onImageLoading(); this.emit('imageloading'); this._setLoadingClass();
 
       return new Promise((resolve, reject) => {
@@ -562,7 +570,7 @@
       this._setLoadedClass();
       this._imageLoaded = true;
 
-      this._opts.onImageLoaded(); this.emit('imageloaded');
+      this._opts.onImageLoaded(this._loadSource); this.emit('imageloaded', this._loadSource);
       if (this._loadResolve) { this._loadResolve(); this._loadResolve = null; }
     }
 
@@ -665,7 +673,7 @@
       e.preventDefault(); e.stopPropagation();
       this._preview.classList.remove(CLASS.DRAG_HOVERED);
       const f = [...e.dataTransfer.files].find(f => f.type.startsWith('image/'));
-      if (f) this._loadFile(f);
+      if (f) this._loadFile(f, 'dragdrop');
     }
 
     /* ──────── Slider ──────── */
@@ -977,7 +985,7 @@
   /* ──────── Statics ──────── */
   ClaudeCrop.ERRORS      = ERRORS;
   ClaudeCrop.parseRatio  = parseRatio;
-  ClaudeCrop.version     = '1.0.1';
+  ClaudeCrop.version     = '1.0.2';
 
   ClaudeCrop.RATIOS = {
     FREE:    null,

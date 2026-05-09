@@ -1,8 +1,8 @@
 # ClaudeCrop
 
-**v1.0.0** — Plugin de recadrage d'image vanilla ES6+, sans dépendance.
+**v1.0.2** — Plugin de recadrage d'image vanilla ES6+, sans dépendance.
 
-Réécriture moderne de [cropit](https://github.com/scottcheng/cropit) avec support natif des ratios d'aspect, du zoom à la molette, du pinch-to-zoom tactile, et d'une API événementielle complète.
+Réécriture moderne de [cropit](https://github.com/scottcheng/cropit) avec support natif des ratios d'aspect, du zoom à la molette, du pinch-to-zoom tactile, d'une API événementielle complète, du verrouillage des éditions et de la traçabilité de l'origine du chargement d'image.
 
 ---
 
@@ -16,6 +16,7 @@ Réécriture moderne de [cropit](https://github.com/scottcheng/cropit) avec supp
   - [Dimensions](#dimensions)
   - [Zoom](#zoom)
   - [Comportement](#comportement)
+  - [Verrouillage des éditions](#verrouillage-des-éditions)
   - [Ratio d'aspect](#ratio-daspect)
   - [Fond d'image](#fond-dimage)
   - [État initial](#état-initial)
@@ -177,6 +178,26 @@ const cc = new ClaudeCrop('#root', {
 | `allowDragNDrop` | `boolean` | `true` | Autorise le glisser-déposer d'un fichier image sur la zone de preview. |
 | `smallImage` | `'allow' \| 'stretch' \| 'reject'` | `'reject'` | Comportement si l'image est plus petite que le conteneur. `'allow'` : zoom réduit jusqu'à la taille originale. `'stretch'` : suit `minZoom`. `'reject'` : déclenche `onImageError`. |
 
+### Verrouillage des éditions
+
+| Option | Type | Défaut | Description |
+|---|---|---|---|
+| `locked` | `boolean` | `false` | Si `true`, toutes les interactions d'édition sont désactivées dès l'initialisation (drag, zoom molette/pinch/slider, rotation, reset). Le chargement de fichier reste actif. Appelez `unlock()` pour réactiver. |
+
+```js
+// Démarrer verrouillé — l'utilisateur ne peut pas encore éditer
+const cc = new ClaudeCrop('#root', {
+  locked: true,
+  onLock:   () => console.log('Éditions verrouillées'),
+  onUnlock: () => console.log('Éditions déverrouillées'),
+});
+
+// Plus tard, autoriser l'édition
+document.getElementById('edit-btn').addEventListener('click', () => cc.unlock());
+```
+
+> **Différence avec `disable()`** : `lock()` bloque uniquement les interactions d'édition mais laisse le chargement de fichier (`<input type="file">`) actif. `disable()` désactive tout, y compris l'input fichier, et applique la classe `cc-disabled`.
+
 ### Ratio d'aspect
 
 | Option | Type | Défaut | Description |
@@ -217,13 +238,15 @@ const cc = new ClaudeCrop('#root', {
 | `onFileChange` | `(event)` | L'utilisateur a sélectionné un fichier. |
 | `onFileReaderError` | — | Erreur lors de la lecture du fichier. |
 | `onImageLoading` | — | Début du chargement d'une image. |
-| `onImageLoaded` | — | Image chargée et affichée avec succès. |
+| `onImageLoaded` | `(source)` | Image chargée et affichée avec succès. `source` indique l'origine : `'api'` (appel direct à `loadImage()`), `'fileinput'` (sélection de fichier), `'dragdrop'` (glisser-déposer), `'restore'` (restauration via `imageState`). |
 | `onImageError` | `(error)` | Échec du chargement. Voir [Gestion des erreurs](#gestion-des-erreurs). |
 | `onZoomEnabled` | — | Le slider de zoom est activé (image zoomable). |
 | `onZoomDisabled` | — | Le slider de zoom est désactivé. |
 | `onZoomChange` | `(zoom: number)` | Le niveau de zoom a changé. |
 | `onOffsetChange` | `({ x, y })` | La position de l'image a changé. |
 | `onAspectRatioChange` | `({ w, h } \| null)` | Le ratio d'aspect a changé. |
+| `onLock` | — | Les éditions viennent d'être verrouillées (via `lock()` ou `locked: true`). |
+| `onUnlock` | — | Les éditions viennent d'être déverrouillées (via `unlock()`). |
 
 ---
 
@@ -231,9 +254,18 @@ const cc = new ClaudeCrop('#root', {
 
 ### Méthodes
 
-#### `loadImage(src): Promise<void>`
+#### `loadImage(src, source?): Promise<void>`
 
 Charge une image par URL ou data URI. Retourne une Promise résolue quand l'image est prête.
+
+Le paramètre optionnel `source` permet de préciser l'origine du chargement. Il est transmis à `onImageLoaded` et à l'événement `imageloaded`. Utile pour distinguer un chargement programmatique d'un chargement utilisateur dans vos propres callbacks.
+
+| Valeur de `source` | Description |
+|---|---|
+| `'api'` | Appel direct à `loadImage()` _(défaut)_ |
+| `'fileinput'` | Sélection via `<input type="file">` _(géré en interne)_ |
+| `'dragdrop'` | Glisser-déposer sur la zone de preview _(géré en interne)_ |
+| `'restore'` | Restauration via l'option `imageState` _(géré en interne)_ |
 
 ```js
 cc.loadImage('https://example.com/photo.jpg')
@@ -242,7 +274,63 @@ cc.loadImage('https://example.com/photo.jpg')
 
 // Data URI
 cc.loadImage('data:image/png;base64,iVBORw0K…');
+
+// Avec source personnalisée
+cc.loadImage(myUrl, 'api');
 ```
+
+```js
+// Réagir différemment selon l'origine
+cc.on('imageloaded', (source) => {
+  if (source === 'dragdrop') {
+    showToast('Image déposée avec succès !');
+  } else if (source === 'fileinput') {
+    showToast('Fichier chargé.');
+  }
+  console.log('Source du chargement :', source);
+  // → 'api' | 'fileinput' | 'dragdrop' | 'restore'
+});
+```
+
+---
+
+#### `lock(): void`
+
+Verrouille toutes les interactions d'édition : drag, zoom (molette, pinch, slider), rotation et reset. Le chargement de fichier via l'input reste actif.
+
+Ajoute la classe `cc-locked` sur l'élément racine. Émet l'événement `lock` et appelle `onLock`. Sans effet si déjà verrouillé.
+
+```js
+cc.lock();
+console.log(cc.isLocked); // → true
+```
+
+---
+
+#### `unlock(): void`
+
+Déverrouille les interactions d'édition précédemment bloquées par `lock()` ou l'option `locked: true`.
+
+Retire la classe `cc-locked`. Émet l'événement `unlock` et appelle `onUnlock`. Sans effet si déjà déverrouillé.
+
+```js
+cc.unlock();
+console.log(cc.isLocked); // → false
+```
+
+---
+
+#### `disable(): void`
+
+Désactive **toutes** les interactions, y compris l'input fichier. Ajoute la classe `cc-disabled` sur l'élément racine.
+
+> Pour ne bloquer que les éditions tout en gardant le chargement actif, préférez `lock()`.
+
+---
+
+#### `enable(): void`
+
+Réactive toutes les interactions. Retire la classe `cc-disabled`.
 
 ---
 
@@ -331,31 +419,19 @@ cc.centerImage();
 
 #### `rotateCW(): void`
 
-Rotation de 90° dans le sens des aiguilles d'une montre.
+Rotation de 90° dans le sens des aiguilles d'une montre. Sans effet si l'instance est verrouillée.
 
 ---
 
 #### `rotateCCW(): void`
 
-Rotation de 90° dans le sens inverse des aiguilles d'une montre.
+Rotation de 90° dans le sens inverse des aiguilles d'une montre. Sans effet si l'instance est verrouillée.
 
 ---
 
 #### `reset(): void`
 
-Remet l'image au zoom initial et la recentre. La rotation est aussi réinitialisée à 0°.
-
----
-
-#### `disable(): void`
-
-Désactive toutes les interactions (drag, zoom, slider, input fichier). Ajoute la classe `cc-disabled` sur l'élément racine.
-
----
-
-#### `enable(): void`
-
-Réactive toutes les interactions. Retire la classe `cc-disabled`.
+Remet l'image au zoom initial et la recentre. La rotation est aussi réinitialisée à 0°. Sans effet si l'instance est verrouillée.
 
 ---
 
@@ -394,6 +470,7 @@ cc.destroy();
 | `rotation` | ✅ | — | `number` | Rotation courante en degrés (`0`, `90`, `180`, `270`). |
 | `aspectRatio` | ✅ | ✅ | `object \| null` | Ratio actuel `{ w, h }`. L'écriture appelle `setAspectRatio()`. |
 | `cropRect` | ✅ | — | `{ x, y, width, height }` | Rectangle de recadrage dans le repère du preview (en px). `null` si pas de ratio. |
+| `isLocked` | ✅ | — | `boolean` | `true` si les éditions sont actuellement verrouillées via `lock()` ou `locked: true`. |
 
 ```js
 // Exemples de lecture / écriture
@@ -403,6 +480,10 @@ cc.zoom = 2;                  // Zoom vers le centre à ×2
 console.log(cc.cropRect);    // → { x: 50, y: 28, width: 500, height: 281 }
 
 cc.previewSize = { width: 800, height: 450 }; // Redimensionner live
+
+console.log(cc.isLocked);    // → false
+cc.lock();
+console.log(cc.isLocked);    // → true
 
 const state = cc.imageState; // Snapshot
 // … plus tard :
@@ -476,13 +557,15 @@ cc.off('zoomchange', handler);
 | `filechange` | `Event` | L'utilisateur a sélectionné un fichier. |
 | `filereaderror` | — | Erreur lors de la lecture du fichier. |
 | `imageloading` | — | Début du chargement. |
-| `imageloaded` | — | Image chargée et affichée. |
+| `imageloaded` | `source: string` | Image chargée et affichée. `source` vaut `'api'`, `'fileinput'`, `'dragdrop'` ou `'restore'`. |
 | `imageerror` | `{ code, message }` | Échec du chargement. |
 | `zoomenabled` | — | Slider de zoom activé. |
 | `zoomdisabled` | — | Slider de zoom désactivé. |
 | `zoomchange` | `number` | Nouveau niveau de zoom. |
 | `offsetchange` | `{ x, y }` | Nouvelle position de l'image. |
 | `aspectratiochange` | `{ w, h } \| null` | Nouveau ratio (ou `null` si libéré). |
+| `lock` | — | Les éditions viennent d'être verrouillées. |
+| `unlock` | — | Les éditions viennent d'être déverrouillées. |
 
 ---
 
@@ -611,6 +694,61 @@ const cc = new ClaudeCrop('#crop-root', {
 
 ---
 
+### Verrouillage des éditions à l'initialisation
+
+Cas typique : afficher un aperçu en lecture seule, puis autoriser l'édition après une action utilisateur (bouton, authentification, etc.).
+
+```html
+<div id="crop-root">
+  <div class="cc-preview" style="width:600px;height:400px"></div>
+  <input type="file" class="cc-image-input">
+  <input type="range" class="cc-image-zoom-input">
+</div>
+
+<button id="btn-edit" disabled>✏️ Modifier</button>
+<button id="btn-lock">🔒 Verrouiller</button>
+
+<script>
+const cc = new ClaudeCrop('#crop-root', {
+  aspectRatio: '16:9',
+  locked: true,             // démarre en lecture seule
+  onLock:   () => {
+    document.getElementById('btn-edit').disabled = false;
+    document.getElementById('btn-lock').disabled = true;
+  },
+  onUnlock: () => {
+    document.getElementById('btn-edit').disabled = true;
+    document.getElementById('btn-lock').disabled = false;
+  },
+});
+
+cc.loadImage('https://example.com/photo.jpg');
+
+document.getElementById('btn-edit').addEventListener('click', () => cc.unlock());
+document.getElementById('btn-lock').addEventListener('click', () => cc.lock());
+</script>
+```
+
+---
+
+### Verrouillage conditionnel via événements
+
+```js
+const cc = new ClaudeCrop('#root', { aspectRatio: '4:3' });
+
+cc.on('lock',   () => console.log('🔒 Verrouillé  — isLocked:', cc.isLocked));
+cc.on('unlock', () => console.log('🔓 Déverrouillé — isLocked:', cc.isLocked));
+
+// Verrouiller automatiquement après l'export
+document.getElementById('save-btn').addEventListener('click', async () => {
+  const blob = await cc.exportBlob({ type: 'image/jpeg', quality: 0.9 });
+  // … upload …
+  cc.lock(); // empêcher de nouvelles modifications après sauvegarde
+});
+```
+
+---
+
 ### Sauvegarde et restauration d'état
 
 ```js
@@ -718,6 +856,7 @@ const data = cc.export();
 | `cropit-image-loaded` | `cc-image-loaded` |
 | `cropit-drag-hovered` | `cc-drag-hovered` |
 | `cropit-disabled` | `cc-disabled` |
+| _(n/a)_ | `cc-locked` _(nouveau)_ |
 
 ### Méthodes
 
@@ -729,6 +868,7 @@ const data = cc.export();
 | `$el.cropit('reenable')` | `cc.enable()` |
 | `$el.cropit('disable')` | `cc.disable()` |
 | `$el.cropit('imageSrc', url)` | `cc.imageSrc = url` ou `cc.loadImage(url)` |
+| _(n/a)_ | `cc.lock()` / `cc.unlock()` _(nouveau)_ |
 
 ### Nouveautés
 
@@ -740,6 +880,8 @@ const data = cc.export();
 | Chargement Promise | ❌ | ✅ `loadImage()` retourne une `Promise` |
 | EventEmitter | ❌ | ✅ `.on()` / `.off()` / `.once()` |
 | Export Blob | ❌ | ✅ `exportBlob()` retourne `Promise<Blob>` |
+| Verrouillage des éditions | ❌ | ✅ option `locked`, `lock()` / `unlock()` |
+| Origine du chargement | ❌ | ✅ `onImageLoaded(source)` / événement `imageloaded` avec `source` |
 | Dépendance jQuery | ✅ obligatoire | ❌ aucune |
 
 ---
@@ -773,4 +915,4 @@ MIT — libre d'utilisation, de modification et de distribution.
 
 ---
 
-*Basé sur [cropit](https://github.com/scottcheng/cropit) de Scott Cheng — réécrit et étendu par ClaudeCrop v1.0.0.*
+*Basé sur [cropit](https://github.com/scottcheng/cropit) de Scott Cheng — réécrit et étendu par ClaudeCrop v1.0.2.*
